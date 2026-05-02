@@ -77,7 +77,7 @@ if [[ ! -f "$OutFile" ]]; then
 		header+=",${field},${field}_unit"
 	done
 	echo "$header" > "$OutFile"
-	> "$ErrorLog"  # Clear error log
+	: > "$ErrorLog"  # Clear error log
 fi
 
 ## Initialize counters
