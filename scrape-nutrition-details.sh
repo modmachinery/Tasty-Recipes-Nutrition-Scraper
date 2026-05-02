@@ -12,7 +12,7 @@ if [[ ! -f "$CSV_InFile" ]]; then
 	echo "Error: Input CSV file not found: $CSV_InFile" >&2
 	exit 1
 fi
-mapfile -t URLs < <(cat "$CSV_InFile")
+mapfile -t URLs < <(tail -n +2 "$CSV_InFile")
 
 OutFile=$ScriptDir/Scraped-Data.csv
 
@@ -166,7 +166,7 @@ for URL in "${URLs[@]}"; do
 		if [[ -n "$raw_value" && "$raw_value" != "null" ]]; then
 			# Split value and unit
 			read -r value unit <<< "$(split_value_unit "$raw_value")"
-			row+="," "$(csv_escape "$value")" "," "$(csv_escape "$unit")"
+			row+=",$(csv_escape "$value"),$(csv_escape "$unit")"
 		else
 			row+=",,"
 		fi
