@@ -1,0 +1,16 @@
+# Test/sample data files
+extracted-output-rough.txt
+full-output.txt
+
+# Generated output files
+Scraped-Data.csv
+Scraped-Data.errors.txt
+
+# Temporary files
+*.tmp
+.DS_Store
+
+# IDE
+.vscode/
+*.swp
+*.swo
