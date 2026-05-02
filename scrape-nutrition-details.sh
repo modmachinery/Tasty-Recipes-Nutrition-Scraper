@@ -12,7 +12,7 @@ if [[ ! -f "$CSV_InFile" ]]; then
 	echo "Error: Input CSV file not found: $CSV_InFile" >&2
 	exit 1
 fi
-mapfile -t URLs < <(tail -n +2 "$CSV_InFile")
+mapfile -t URLs < <(tail -n +2 "$CSV_InFile" | grep -v '^[[:space:]]*$')
 
 OutFile=$ScriptDir/Scraped-Data.csv
 
@@ -97,10 +97,14 @@ for URL in "${URLs[@]}"; do
 	fi
 	
 	## Extract slug from URL (last path component before trailing slash)
-	slug="${URL##*/}"     # Get everything after last /
+	if [[ -z "$URL" ]]; then
+		continue
+	fi
+	# Remove trailing slash first, then extract last path component
+	slug="${URL%/}"       # Remove trailing slash
+	slug="${slug##*/}"    # Get everything after last /
 	slug="${slug%%\?*}"   # Remove query string if present
 	slug="${slug%%#*}"    # Remove fragment if present
-	slug="${slug%%/}"     # Remove trailing slash
 	
 	# Skip if already processed
 	if [[ -n "${ProcessedSlugs[$slug]}" ]]; then
@@ -116,32 +120,24 @@ for URL in "${URLs[@]}"; do
 		continue
 	fi
 	
-	## Extract nutrition JSON from HTML
-	# Extract the entire JSON-LD script content, then parse for nutrition object
-	# First, get the script tag content as a single line
-	json_ld_content=$(sed -n 's/.*type="application\/ld+json"[^>]*>\s*\(.*\)<\/script>.*/\1/p' "$WIP" | tr '\n' ' ')
+	## Extract nutrition JSON from HTML using Python for reliable parsing
+	json_ld_content=$(python3 -c "
+import sys, json, re
+with open('$WIP', 'r', encoding='utf-8', errors='ignore') as f:
+    html = f.read()
+match = re.search(r'<script type=\"application/ld\+json\"[^>]*>(.*?)</script>', html, re.DOTALL)
+if match:
+    data = json.loads(match.group(1))
+    if isinstance(data, dict) and '@graph' in data:
+        for item in data.get('@graph', []):
+            if item.get('@type') == 'Recipe' and 'nutrition' in item:
+                print(json.dumps(item['nutrition']))
+                sys.exit(0)
+" 2>/dev/null || true)
 	
 	if [[ -z "$json_ld_content" ]]; then
-		# No JSON-LD found
-		echo "$URL,NO_JSON_LD" >> "$ErrorLog"
-		row="$(csv_escape "$slug")"
-		for field in "${NutritionFields[@]}"; do
-			row+=",,"
-		done
-		echo "$row" >> "$OutFile"
-		((ErrorCount++))
-		sleep 5
-		continue
-	fi
-	
-	# Try to extract nutrition object from the JSON
-	# The JSON-LD might be an array or single object, and nutrition might be nested
-	nutrition_json=$(echo "$json_ld_content" | jq -r '(if type == "array" then .[] else . end) | select(.nutrition != null) | .nutrition' 2>/dev/null || true)
-	
-	if [[ -z "$nutrition_json" ]]; then
-		# No nutrition data found in JSON-LD
+		# No nutrition data found
 		echo "$URL,NO_NUTRITION_DATA" >> "$ErrorLog"
-		# Write slug with blank fields
 		row="$(csv_escape "$slug")"
 		for field in "${NutritionFields[@]}"; do
 			row+=",,"
@@ -151,11 +147,11 @@ for URL in "${URLs[@]}"; do
 		sleep 5
 		continue
 	fi
-	
-	# Parse each field
+
+	# Parse each field from nutrition object (already extracted and JSON-formatted by Python)
 	declare -A FieldValues
 	for field in "${NutritionFields[@]}"; do
-		value=$(echo "$nutrition_json" | jq -r ".$field // \"\"" 2>/dev/null || echo "")
+		value=$(echo "$json_ld_content" | jq -r ".$field // \"\"" 2>/dev/null || echo "")
 		FieldValues["$field"]="$value"
 	done
 	
