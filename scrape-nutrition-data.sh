@@ -4,7 +4,7 @@
 ## Set base directory
 ScriptDir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 WIP=$(mktemp)
-ErrorLog=$ScriptDir/Scraped-Data.errors.txt
+ErrorLog=$ScriptDir/log/no-data.csv
 
 ## Read URLs from CSV file
 CSV_InFile="$1"
@@ -14,7 +14,7 @@ if [[ ! -f "$CSV_InFile" ]]; then
 fi
 mapfile -t URLs < <(tail -n +2 "$CSV_InFile" | grep -v '^[[:space:]]*$')
 
-OutFile=$ScriptDir/Scraped-Data.csv
+OutFile=$ScriptDir/scraped-data-output.csv
 
 ## Define nutrition fields in order
 NutritionFields=(
@@ -76,7 +76,7 @@ if [[ ! -f "$OutFile" ]]; then
 	for field in "${NutritionFields[@]}"; do
 		header+=",${field},${field}_unit"
 	done
-	echo "$header" > "$OutFile"
+	printf '%s\n' "${header}" > "$OutFile"
 	: > "$ErrorLog"  # Clear error log
 fi
 
@@ -93,7 +93,8 @@ for URL in "${URLs[@]}"; do
 	
 	# Show progress every 50 URLs
 	if (( ProcessedCount % 50 == 0 )); then
-		echo "Processing: $ProcessedCount / $TotalCount"
+		printf 'Processing: %s / %s\n' \
+			"${ProcessedCount}" "${TotalCount}"
 	fi
 	
 	## Extract slug from URL (last path component before trailing slash)
@@ -148,10 +149,15 @@ if match:
 		continue
 	fi
 
-	# Parse each field from nutrition object (already extracted and JSON-formatted by Python)
+	# Parse each field from nutrition object 
+	# (already extracted and JSON-formatted by Python)
 	declare -A FieldValues
 	for field in "${NutritionFields[@]}"; do
-		value=$(echo "$json_ld_content" | jq -r ".$field // \"\"" 2>/dev/null || echo "")
+		value=$(
+			echo "$json_ld_content" \
+			| jq -r ".$field // \"\"" 2>/dev/null \
+			|| echo ""
+		)
 		FieldValues["$field"]="$value"
 	done
 	
@@ -168,7 +174,7 @@ if match:
 		fi
 	done
 	
-	echo "$row" >> "$OutFile"
+	printf '%s\n' "${row}" >> "$OutFile"
 	
 	## Wait to avoid bot detection
 	sleep 5
@@ -180,12 +186,15 @@ rm -f "$WIP"
 ## Print summary
 EndTime=$(date +%s)
 ElapsedTime=$((EndTime - StartTime))
-echo ""
-echo "========== Scrape Complete =========="
-echo "Total URLs: $TotalCount"
-echo "Processed: $ProcessedCount"
-echo "Skipped (resume): $SkippedCount"
-echo "Errors/Missing: $ErrorCount"
-echo "Time elapsed: $(printf '%d:%02d:%02d' $((ElapsedTime/3600)) $((ElapsedTime%3600/60)) $((ElapsedTime%60)))"
-echo "Output: $OutFile"
-echo "Errors log: $ErrorLog"
+printf '\n%s\n' "========== Scrape Complete =========="
+printf 'Total URLs: %s\n' "${TotalCount}"
+printf 'Processed: %s\n' "${ProcessedCount}"
+printf 'Skipped (resume): %s\n' "${SkippedCount}"
+printf 'Errors/Missing: %s\n' "${ErrorCount}"
+printf "Time Elapsed: "
+printf '%d:%02d:%02d\n' \
+	"$((ElapsedTime/3600))" \
+	"$((ElapsedTime%3600/60))" \
+	"$((ElapsedTime%60)))"
+printf 'Output: %s\n' "${OutFile}"
+printf 'Missing Data/Error Log: %s' "${ErrorLog}"
