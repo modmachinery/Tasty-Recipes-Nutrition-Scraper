@@ -1,4 +1,4 @@
-# Tasty Recipes Nutrition Data Scraper
+# Tasty Recipes Nutrition Scraper
 If you host a recipe site and use the *Tasty Recipes* plugin to provide nutrition data, your data is stored in their database and there is currently no official option available to export it. This script provides a quick and reasonable solution.
 
 ## Quick Note
